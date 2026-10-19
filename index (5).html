@@ -1,0 +1,779 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Royal Rummy</title>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#071b16;color:#fff;font-family:Arial,sans-serif}
+header{text-align:center;padding:18px;color:#f5d778;font-size:28px;font-weight:bold;border-bottom:1px solid #b99845}
+.screen{display:none;max-width:700px;margin:auto;padding:14px}
+.screen.active{display:block}
+.panel{background:#10382b;border:1px solid #b99845;border-radius:14px;padding:15px;margin:12px 0}
+h2,h3{text-align:center;color:#f5d778}
+input{width:100%;padding:12px;margin:7px 0;background:#071b16;color:white;border:1px solid #b99845;border-radius:8px;font-size:16px}
+button{padding:11px 13px;margin:4px;border:1px solid #e7c65f;border-radius:8px;background:#d9b64f;color:#172016;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}
+.secondary{background:#174a38;color:white}
+.danger{background:#8b2929;color:white}
+.full{width:100%;margin:7px 0}
+.center{text-align:center}
+.muted{font-size:13px;color:#c7d8ce}
+#loading{text-align:center;padding:15px;color:#f5d778;overflow-wrap:anywhere}
+#errorBox{display:none;margin:10px;padding:12px;border:1px solid #e28a8a;border-radius:8px;color:#ffd0d0;overflow-wrap:anywhere}
+.roomcode{text-align:center;font-size:30px;letter-spacing:5px;color:#f5d778;font-weight:bold;padding:10px}
+.player{display:flex;justify-content:space-between;gap:8px;padding:10px;margin:5px 0;background:#174a38;border-radius:8px}
+.player small{color:#f5d778}
+.tablearea{background:#0c4b32;border:2px solid #b99845;border-radius:14px;padding:12px;margin:12px 0}
+.piles{display:flex;justify-content:center;gap:18px;flex-wrap:wrap}
+.pile{width:78px;height:105px;background:#fff8e9;color:#222;border:2px solid #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:bold;font-size:22px}
+.backcard{background:repeating-linear-gradient(45deg,#173d77,#173d77 7px,#d6b64d 7px,#d6b64d 10px);color:white}
+.hand{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;margin:12px 0}
+.card{width:49px;height:76px;margin:0;padding:4px;background:#fffaf0;color:#222;border:2px solid #d9d1bd;border-radius:7px;font-size:16px}
+.card .suit{display:block;font-size:22px;margin-top:5px}
+.card.red{color:#c52232}
+.card.selected{border:3px solid #f4c945;transform:translateY(-6px);box-shadow:0 0 8px #f4c945}
+.card.joker{background:#f5e2a1;border-color:#c99826}
+#gameMessage{text-align:center;color:#f5d778;min-height:25px;overflow-wrap:anywhere}
+footer{text-align:center;color:#8ca99a;padding:20px;font-size:12px}
+</style>
+</head>
+<body>
+
+<header>👑 ROYAL RUMMY</header>
+<div id="loading">Connecting to Firebase...</div>
+<div id="errorBox"></div>
+
+<section id="home" class="screen">
+ <div class="panel">
+  <h2>Welcome to Royal Rummy</h2>
+  <input id="playerName" maxlength="20" placeholder="Enter your name">
+  <button class="full" onclick="createRoom()">Create New Room</button>
+  <hr style="border-color:#456b57">
+  <input id="roomInput" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit room code">
+  <button class="full secondary" onclick="joinRoom()">Join Room</button>
+  <p id="homeMessage" class="center muted"></p>
+ </div>
+</section>
+
+<section id="lobby" class="screen">
+ <div class="panel">
+  <h2>Room Lobby</h2>
+  <div id="roomCodeDisplay" class="roomcode">------</div>
+  <div class="center"><button class="secondary" onclick="copyRoomCode()">Copy Room Code</button></div>
+  <h3>Players</h3>
+  <div id="playerList"></div>
+  <p id="lobbyMessage" class="center muted"></p>
+  <button id="startButton" class="full" onclick="startGame()">Start Rummy</button>
+  <button class="full secondary" onclick="addTest()">Add Test Player</button>
+  <button class="full danger" onclick="leaveRoom()">Leave Room</button>
+ </div>
+</section>
+
+<section id="game" class="screen">
+ <div class="panel">
+  <h2>Royal Rummy Table</h2>
+  <div class="center muted">Room: <span id="gameRoomCode"></span></div>
+  <div class="center muted">Wild Joker rank: <strong id="wildRank"></strong></div>
+  <div id="opponentList"></div>
+
+  <div class="tablearea">
+   <div id="gameMessage">Waiting...</div>
+   <div class="piles">
+    <div class="center">
+     <div id="deckPile" class="pile backcard">DECK</div>
+     <div class="muted">Closed deck: <span id="deckCount">0</span></div>
+     <button id="drawDeckButton" onclick="drawCard('deck')">Draw Deck</button>
+    </div>
+    <div class="center">
+     <div id="discardPile" class="pile">Empty</div>
+     <div class="muted">Open discard</div>
+     <button id="drawDiscardButton" class="secondary" onclick="drawCard('discard')">Pick Discard</button>
+    </div>
+   </div>
+  </div>
+
+  <h3>Your Cards</h3>
+  <div class="center">
+   <button class="secondary" onclick="toggleAutoSort()">Auto Sort: <span id="sortState">OFF</span></button>
+  </div>
+  <div id="hand" class="hand"></div>
+  <p id="handMessage" class="center muted"></p>
+  <div class="center">
+   <button id="discardButton" onclick="discardCard()">Discard Selected Card</button>
+   <button id="declareButton" onclick="declareHand()">DECLARE</button>
+   <button class="secondary" onclick="checkHand()">Check Hand</button>
+  </div>
+  <button class="full danger" onclick="leaveRoom()">Leave Room</button>
+  <div id="resultBox"></div>
+ </div>
+</section>
+
+<footer>Royal Rummy • Game prototype</footer>
+
+<script>
+window.addEventListener("error",function(e){
+ var l=document.getElementById("loading");
+ if(l&&l.style.display!=="none"){
+  l.textContent="JavaScript error: "+(e.message||"Script error")+(e.lineno?" at line "+e.lineno:"");
+ }
+});
+window.addEventListener("unhandledrejection",function(e){
+ var l=document.getElementById("loading");
+ if(l&&l.style.display!=="none"){
+  l.textContent="Connection error: "+(e.reason&&e.reason.message?e.reason.message:String(e.reason||"Unknown"));
+ }
+});
+</script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+"use strict";
+
+var firebaseConfig={
+apiKey: "AIzaSyBd-q9W7U6KwL6ybCiFk_qFFOC3tNrURAU",
+ authDomain:"rummygame-29.firebaseapp.com",
+ databaseURL:"https://rummygame-29-default-rtdb.asia-southeast1.firebasedatabase.app",
+ projectId:"rummygame-29",
+ storageBucket:"rummygame-29.firebasestorage.app",
+ messagingSenderId:"335767013203",
+ appId:"1:335767013203:web:ae60c9d6356810e6a143a6",
+ measurementId:"G-ZBC6MN5XB7"
+};
+
+var db=null,uid=null,currentCode=null,currentRoom=null,roomListener=null;
+var ready=false,selectedIndex=-1,autoSort=false,botBusy=false;
+
+var suits=[
+ {name:"Spades",symbol:"♠",red:false},
+ {name:"Hearts",symbol:"♥",red:true},
+ {name:"Clubs",symbol:"♣",red:false},
+ {name:"Diamonds",symbol:"♦",red:true}
+];
+var ranks=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+
+function el(id){return document.getElementById(id)}
+function msg(id,s){el(id).textContent=s}
+function error(s){el("errorBox").style.display="block";el("errorBox").textContent=s}
+function clearError(){el("errorBox").style.display="none";el("errorBox").textContent=""}
+function screen(id){
+ document.querySelectorAll(".screen").forEach(function(s){s.classList.remove("active")});
+ el(id).classList.add("active");
+}
+function safe(s){
+ return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+ });
+}
+function playerName(){
+ return (el("playerName").value.trim()||"Player").substring(0,20);
+}
+function rankValue(r){
+ if(r==="A")return 1;
+ if(r==="J")return 11;
+ if(r==="Q")return 12;
+ if(r==="K")return 13;
+ return Number(r)||0;
+}
+function shuffled(a){
+ for(var i=a.length-1;i>0;i--){
+  var j=Math.floor(Math.random()*(i+1));
+  var t=a[i];a[i]=a[j];a[j]=t;
+ }
+ return a;
+}
+function makeDeck(){
+ var d=[];
+ for(var pack=0;pack<2;pack++){
+  suits.forEach(function(s){
+   ranks.forEach(function(r){
+    d.push({id:pack+"_"+s.name+"_"+r,suit:s.name,symbol:s.symbol,red:s.red,rank:r,printedJoker:false});
+   });
+  });
+  for(var j=0;j<2;j++){
+   d.push({id:pack+"_PJ_"+j,suit:"Joker",symbol:"★",red:false,rank:"JOKER",printedJoker:true});
+  }
+ }
+ return shuffled(d);
+}
+function isWild(c,wildRank){
+ return !!(c.printedJoker||c.rank===wildRank);
+}
+function roomPlayers(r){return r&&r.players?r.players:{}}
+function ids(r){return Object.keys(roomPlayers(r))}
+function gameData(){return currentRoom&&currentRoom.game?currentRoom.game:null}
+function myHand(){
+ var g=gameData();
+ return g&&g.hands&&uid?(g.hands[uid]||[]):[];
+}
+function myTurn(g){return !!(g&&g.turnUid===uid)}
+function getWild(g){return g&&g.wildRank?g.wildRank:""}
+function myScore(hand,wildRank){
+ return Math.min(80,(hand||[]).reduce(function(sum,c){
+  if(c.printedJoker||c.rank===wildRank)return sum;
+  return sum+(["A","K","Q","J"].indexOf(c.rank)>=0?10:rankValue(c.rank));
+ },0));
+}
+
+/* Pure sequence: consecutive ranks of one suit, no printed joker.
+   Ace can be low in A-2-3 or high in Q-K-A. */
+function isPureRun(cards){
+ if(cards.length<3||cards.some(function(c){return c.printedJoker}))return false;
+ var suit=cards[0].suit;
+ if(cards.some(function(c){return c.suit!==suit}))return false;
+ var vals=cards.map(function(c){return rankValue(c.rank)}).sort(function(a,b){return a-b});
+ if(new Set(vals).size!==vals.length)return false;
+ var low=true;
+ for(var i=1;i<vals.length;i++)if(vals[i]!==vals[0]+i)low=false;
+ if(low)return true;
+ var highVals=vals.map(function(v){return v===1?14:v}).sort(function(a,b){return a-b});
+ for(var j=1;j<highVals.length;j++){
+  if(highVals[j]!==highVals[0]+j)return false;
+ }
+ return true;
+}
+
+/* Check whether a subset can form an impure sequence using jokers. */
+function isRun(cards,wildRank){
+ if(cards.length<3)return false;
+ if(isPureRun(cards))return true;
+
+ for(var suitIndex=0;suitIndex<suits.length;suitIndex++){
+  var suit=suits[suitIndex].name;
+  for(var start=1;start<=14-cards.length+1;start++){
+   var targets=[];
+   for(var k=0;k<cards.length;k++){
+    var v=start+k;
+    targets.push(v===14?"A":ranks[v-1]);
+   }
+   var used=new Array(targets.length).fill(false);
+   var ordered=cards.slice().sort(function(a,b){
+    var aExact=(!a.printedJoker&&a.suit===suit&&targets.indexOf(a.rank)>=0)?0:1;
+    var bExact=(!b.printedJoker&&b.suit===suit&&targets.indexOf(b.rank)>=0)?0:1;
+    return aExact-bExact;
+   });
+
+   function assign(pos,usedWild){
+    if(pos===ordered.length)return usedWild;
+    var c=ordered[pos];
+    for(var t=0;t<targets.length;t++){
+     if(used[t])continue;
+     var exact=!c.printedJoker&&c.suit===suit&&c.rank===targets[t];
+     var wild=isWild(c,wildRank);
+     if(!exact&&!wild)continue;
+     used[t]=true;
+     var result=assign(pos+1,usedWild||!exact);
+     used[t]=false;
+     if(result===true)return true;
+    }
+    return false;
+   }
+
+   if(assign(0,false)===true)return true;
+  }
+ }
+ return false;
+}
+
+function isSet(cards,wildRank){
+ if(cards.length<3||cards.length>4)return false;
+ for(var r=0;r<ranks.length;r++){
+  var target=ranks[r],usedSuits={};
+  var ok=true;
+  for(var i=0;i<cards.length;i++){
+   var c=cards[i];
+   if(!c.printedJoker&&c.rank===target){
+    if(usedSuits[c.suit]){ok=false;break}
+    usedSuits[c.suit]=true;
+   }else if(!isWild(c,wildRank)){
+    ok=false;break;
+   }
+  }
+  if(ok)return true;
+ }
+ return false;
+}
+
+/* Search all possible groupings of the 13 cards.
+   A valid declaration requires at least two sequences and one pure sequence. */
+function validateHand(hand,wildRank){
+ if(!hand||hand.length!==13){
+  return {valid:false,reason:"A declaration requires exactly 13 cards."};
+ }
+
+ var n=hand.length,groups=[],byCard=[];
+ for(var i=0;i<n;i++)byCard[i]=[];
+
+ for(var mask=1;mask<(1<<n);mask++){
+  var count=0,cards=[],indices=[];
+  for(var b=0;b<n;b++){
+   if(mask&(1<<b)){count++;cards.push(hand[b]);indices.push(b)}
+  }
+  if(count<3)continue;
+
+  var run=isRun(cards,wildRank);
+  var pure=isPureRun(cards);
+  var set=isSet(cards,wildRank);
+
+  if(run||set){
+   var group={mask:mask,seq:run,pure:run&&pure};
+   var gi=groups.length;
+   groups.push(group);
+   indices.forEach(function(idx){byCard[idx].push(gi)});
+  }
+ }
+
+ var memo={};
+ function solve(mask,seqCount,pureCount){
+  if(mask===0)return seqCount>=2&&pureCount>=1;
+  var key=mask+"_"+Math.min(2,seqCount)+"_"+Math.min(1,pureCount);
+  if(memo[key]!==undefined)return memo[key];
+
+  var first=-1;
+  for(var i=0;i<n;i++)if(mask&(1<<i)){first=i;break}
+  if(first<0)return false;
+
+  for(var j=0;j<byCard[first].length;j++){
+   var g=groups[byCard[first][j]];
+   if((g.mask&mask)!==g.mask)continue;
+   if(solve(mask^g.mask,seqCount+(g.seq?1:0),pureCount+(g.pure?1:0))){
+    memo[key]=true;return true;
+   }
+  }
+  memo[key]=false;return false;
+ }
+
+ var valid=solve((1<<n)-1,0,0);
+ return {
+  valid:valid,
+  reason:valid?"Valid hand! You have at least two sequences, including one pure sequence.":"Invalid hand. Make at least two sequences, including one pure sequence, and arrange all 13 cards into valid groups."
+ };
+}
+
+function initializeFirebase(){
+ try{
+  if(typeof firebase==="undefined")throw new Error("Firebase scripts did not load. Check internet and reopen Preview.");
+  if(firebaseConfig.apiKey==="PASTE_YOUR_CURRENT_FIREBASE_API_KEY_HERE"){
+   throw new Error("Paste your current Firebase API key into the firebaseConfig apiKey field.");
+  }
+  if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
+  db=firebase.database();
+
+  firebase.auth().signInAnonymously().then(function(result){
+   uid=result.user.uid;
+   ready=true;
+   el("loading").style.display="none";
+   clearError();
+   screen("home");
+   msg("homeMessage","Firebase connected. Create or join a room.");
+  }).catch(function(e){
+   el("loading").textContent="Firebase sign-in failed.";
+   error((e.code?e.code+": ":"")+(e.message||String(e)));
+  });
+ }catch(e){
+  el("loading").textContent="Firebase could not start.";
+  error(e.message||String(e));
+ }
+}
+
+function listenRoom(code){
+ if(roomListener&&currentCode)db.ref("rooms/"+currentCode).off("value",roomListener);
+ currentCode=code;
+ roomListener=function(snap){
+  if(!snap.exists()){
+   currentRoom=null;currentCode=null;screen("home");msg("homeMessage","Room no longer exists.");return;
+  }
+  currentRoom=snap.val();
+  clearError();
+  renderRoom();
+ };
+ db.ref("rooms/"+code).on("value",roomListener,function(e){error("Room error: "+e.message)});
+}
+
+function createRoom(){
+ if(!ready){msg("homeMessage","Firebase is not connected.");return}
+ clearError();msg("homeMessage","Creating room...");
+ var name=playerName(),tries=0;
+ function attempt(){
+  if(++tries>5){msg("homeMessage","Could not create a room. Try again.");return}
+  var code=String(Math.floor(100000+Math.random()*900000));
+  var room={code:code,hostUid:uid,createdAt:Date.now(),players:{}};
+  room.players[uid]={name:name,joinedAt:Date.now(),isTest:false};
+  db.ref("rooms/"+code).transaction(function(old){if(old===null)return room;return;})
+  .then(function(res){if(res.committed)listenRoom(code);else attempt()})
+  .catch(function(e){msg("homeMessage","Create failed: "+e.message)});
+ }
+ attempt();
+}
+
+function joinRoom(){
+ if(!ready){msg("homeMessage","Firebase is not connected.");return}
+ var code=el("roomInput").value.trim();
+ if(!/^\d{6}$/.test(code)){msg("homeMessage","Enter a 6-digit room code.");return}
+ msg("homeMessage","Joining room...");
+ db.ref("rooms/"+code).transaction(function(r){
+  if(!r||r.game&&r.game.started)return;
+  if(!r.players)r.players={};
+  if(r.players[uid])return r;
+  if(Object.keys(r.players).length>=6)return;
+  r.players[uid]={name:playerName(),joinedAt:Date.now(),isTest:false};
+  return r;
+ }).then(function(res){
+  if(res.committed)listenRoom(code);
+  else msg("homeMessage","Room not found, full, or game already started.");
+ }).catch(function(e){msg("homeMessage","Join failed: "+e.message)});
+}
+
+function copyRoomCode(){
+ if(!currentCode)return;
+ if(navigator.clipboard&&navigator.clipboard.writeText){
+  navigator.clipboard.writeText(currentCode).then(function(){msg("lobbyMessage","Room code copied.")})
+  .catch(function(){msg("lobbyMessage","Room code: "+currentCode)});
+ }else msg("lobbyMessage","Room code: "+currentCode);
+}
+
+function addTest(){
+ if(!currentRoom||!currentCode)return;
+ var testId="test_"+Math.random().toString(36).slice(2,9);
+ db.ref("rooms/"+currentCode).transaction(function(r){
+  if(!r||r.game&&r.game.started)return;
+  if(!r.players)r.players={};
+  if(Object.keys(r.players).length>=6)return;
+  r.players[testId]={name:"Test Player",joinedAt:Date.now(),isTest:true};
+  return r;
+ }).then(function(res){
+  msg("lobbyMessage",res.committed?"Test Player added.":"Room full or game started.");
+ }).catch(function(e){error("Add Test Player failed: "+e.message)});
+}
+
+function startGame(){
+ if(!currentRoom||!currentCode)return;
+ if(currentRoom.hostUid!==uid){msg("lobbyMessage","Only the host can start.");return}
+
+ db.ref("rooms/"+currentCode).transaction(function(r){
+  if(!r||r.game&&r.game.started)return;
+  var players=Object.keys(r.players||{});
+  if(players.length<2)return;
+
+  var deck=makeDeck(),hands={};
+  players.forEach(function(id){
+   hands[id]=[];
+   for(var i=0;i<13;i++)hands[id].push(deck.pop());
+  });
+
+  var top=deck.pop();
+  r.game={
+   started:true,finished:false,deck:deck,
+   discard:top?[top]:[],hands:hands,
+   turnOrder:players,turnUid:players[0],phase:"draw",
+   wildRank:ranks[Math.floor(Math.random()*ranks.length)],
+   scores:{},resultText:""
+  };
+  return r;
+ }).then(function(res){
+  if(!res.committed)msg("lobbyMessage","At least two players are needed.");
+ }).catch(function(e){error("Start failed: "+e.message)});
+}
+
+function drawCard(source){
+ if(!currentRoom||!currentCode)return;
+ db.ref("rooms/"+currentCode).transaction(function(r){
+  if(!r||!r.game||r.game.finished)return;
+  var g=r.game;
+  if(g.turnUid!==uid||g.phase!=="draw")return;
+  if(!g.hands)g.hands={};
+  if(!g.hands[uid])g.hands[uid]=[];
+  if(!g.deck)g.deck=[];
+  if(!g.discard)g.discard=[];
+
+  if(source==="discard"){
+   if(!g.discard.length)return;
+   g.hands[uid].push(g.discard.pop());
+  }else{
+   if(!g.deck.length&&g.discard.length>1){
+    var top=g.discard.pop();
+    g.deck=shuffled(g.discard);
+    g.discard=[top];
+   }
+   if(!g.deck.length)return;
+   g.hands[uid].push(g.deck.pop());
+  }
+  g.phase="discard";
+  return r;
+ }).then(function(res){
+  if(!res.committed)msg("gameMessage","You cannot draw now.");
+ }).catch(function(e){error("Draw failed: "+e.message)});
+}
+
+function toggleAutoSort(){
+ autoSort=!autoSort;selectedIndex=-1;renderGame();
+}
+
+function selectCard(index){
+ var h=myHand();
+ if(index<0||index>=h.length)return;
+ selectedIndex=index;renderGame();
+}
+
+function discardCard(){
+ if(!currentRoom||!currentCode)return;
+ var hand=myHand();
+ if(selectedIndex<0||selectedIndex>=hand.length){
+  msg("handMessage","Select a card first.");return;
+ }
+ var selectedId=hand[selectedIndex].id;
+ db.ref("rooms/"+currentCode).transaction(function(r){
+  if(!r||!r.game||r.game.finished)return;
+  var g=r.game;
+  if(g.turnUid!==uid||g.phase!=="discard"||!g.hands||!g.hands[uid])return;
+  var h=g.hands[uid],idx=h.findIndex(function(c){return c.id===selectedId});
+  if(idx<0)return;
+  var card=h.splice(idx,1)[0];
+  if(!g.discard)g.discard=[];
+  g.discard.push(card);
+
+  var order=g.turnOrder||[],pos=order.indexOf(uid);
+  if(pos<0||!order.length)return;
+  g.turnUid=order[(pos+1)%order.length];
+  g.phase="draw";
+  return r;
+ }).then(function(res){
+  if(res.committed){selectedIndex=-1;msg("handMessage","Card discarded.");}
+  else msg("handMessage","Discard failed. Check your turn.");
+ }).catch(function(e){error("Discard failed: "+e.message)});
+}
+
+function declareHand(){
+ var g=gameData();
+ if(!g||g.finished)return;
+ if(g.turnUid!==uid||g.phase!=="draw"){
+  msg("handMessage","Declare when it is your turn and you hold 13 cards.");return;
+ }
+ var hand=myHand();
+ var result=validateHand(hand,g.wildRank);
+ if(!result.valid){
+  var confirmed=confirm("Your hand is not valid. A wrong declaration ends the game with a penalty. Declare anyway?");
+  if(!confirmed)return;
+ }
+ db.ref("rooms/"+currentCode).transaction(function(r){
+  if(!r||!r.game||r.game.finished)return;
+  var game=r.game;
+  if(game.turnUid!==uid||game.phase!=="draw"||!game.hands||!game.hands[uid])return;
+  var current=game.hands[uid];
+  var check=validateHand(current,game.wildRank);
+  game.finished=true;
+  game.winnerUid=check.valid?uid:null;
+  game.scores={};
+  Object.keys(game.hands).forEach(function(id){
+   game.scores[id]=id===uid&&!check.valid?myScore(game.hands[id],game.wildRank):0;
+  });
+  if(check.valid){
+   game.resultText=(r.players[uid]&&r.players[uid].name||"Player")+" wins with a valid declaration!";
+  }else{
+   game.resultText=(r.players[uid]&&r.players[uid].name||"Player")+" made an invalid declaration. Penalty: "+myScore(current,game.wildRank)+" points.";
+  }
+  return r;
+ }).then(function(res){
+  if(!res.committed)msg("handMessage","Could not declare. Check the current turn.");
+ }).catch(function(e){error("Declare failed: "+e.message)});
+}
+
+function checkHand(){
+ var g=gameData();
+ if(!g)return;
+ var result=validateHand(myHand(),g.wildRank);
+ alert(result.reason);
+}
+
+function leaveRoom(){
+ if(!currentCode||!uid||!db){screen("home");return}
+ var code=currentCode,ref=db.ref("rooms/"+code);
+ if(roomListener){ref.off("value",roomListener);roomListener=null}
+ ref.transaction(function(r){
+  if(!r)return;
+  if(r.players)delete r.players[uid];
+  var all=Object.keys(r.players||{});
+  var real=all.filter(function(id){return !r.players[id].isTest});
+  if(!real.length)return null;
+  if(r.hostUid===uid)r.hostUid=real[0];
+  if(r.game&&r.game.started){
+   if(r.game.hands)delete r.game.hands[uid];
+   r.game.turnOrder=(r.game.turnOrder||[]).filter(function(id){return id!==uid});
+   if(r.game.turnUid===uid&&r.game.turnOrder.length){
+    r.game.turnUid=r.game.turnOrder[0];r.game.phase="draw";
+   }
+  }
+  return r;
+ }).then(function(){
+  currentCode=null;currentRoom=null;selectedIndex=-1;screen("home");
+  msg("homeMessage","You left the room.");
+ }).catch(function(e){error("Leave failed: "+e.message);currentCode=null;currentRoom=null;screen("home")});
+}
+
+function renderRoom(){
+ if(!currentRoom)return;
+ el("roomCodeDisplay").textContent=currentCode||currentRoom.code||"------";
+ var list=el("playerList");list.innerHTML="";
+ ids(currentRoom).forEach(function(id){
+  var p=currentRoom.players[id]||{},row=document.createElement("div");
+  row.className="player";
+  var n=document.createElement("span");
+  n.textContent=p.name||"Player";
+  var tag=document.createElement("small");
+  tag.textContent=(id===currentRoom.hostUid?"Host ":"")+(id===uid?"• You ":"")+(p.isTest?"• Test":"");
+  row.appendChild(n);row.appendChild(tag);list.appendChild(row);
+ });
+ if(currentRoom.game&&currentRoom.game.started){
+  screen("game");renderGame();
+ }else{
+  screen("lobby");
+  el("startButton").disabled=currentRoom.hostUid!==uid;
+  msg("lobbyMessage",ids(currentRoom).length+" player(s). At least 2 required.");
+ }
+}
+
+function displayedHand(hand){
+ var a=hand.map(function(c,i){return {card:c,index:i}});
+ if(!autoSort)return a;
+ var so={Spades:1,Hearts:2,Clubs:3,Diamonds:4,Joker:5};
+ a.sort(function(x,y){
+  var s=so[x.card.suit]-so[y.card.suit];
+  return s||rankValue(x.card.rank)-rankValue(y.card.rank);
+ });
+ return a;
+}
+
+function renderGame(){
+ var g=gameData();
+ if(!g)return;
+ var hand=myHand(),mine=myTurn(g)&&!g.finished;
+ el("gameRoomCode").textContent=currentCode||"";
+ el("wildRank").textContent=getWild(g);
+ el("deckCount").textContent=(g.deck||[]).length;
+
+ var top=(g.discard||[]).length?g.discard[g.discard.length-1]:null;
+ el("discardPile").innerHTML="";
+ if(top){
+  var span=document.createElement("span");
+  span.innerHTML=top.printedJoker?"★ JOKER":safe(top.rank)+"<br>"+safe(top.symbol);
+  if(top.red)span.style.color="#c52232";
+  el("discardPile").appendChild(span);
+ }else el("discardPile").textContent="Empty";
+
+ var canDraw=mine&&g.phase==="draw";
+ var canDiscard=mine&&g.phase==="discard";
+ el("drawDeckButton").disabled=!canDraw||g.finished;
+ el("drawDiscardButton").disabled=!canDraw||!(g.discard||[]).length||g.finished;
+ el("discardButton").disabled=!canDiscard||selectedIndex<0||g.finished;
+ el("declareButton").disabled=!canDraw||g.finished;
+ el("sortState").textContent=autoSort?"ON":"OFF";
+
+ if(g.finished){
+  msg("gameMessage",g.resultText||"Game finished.");
+ }else if(mine){
+  msg("gameMessage",g.phase==="draw"?"Your turn: draw a card or declare.":"Your turn: select one card and discard.");
+ }else{
+  var next=currentRoom.players[g.turnUid];
+  msg("gameMessage","Waiting for "+(next?next.name:"the next player")+".");
+ }
+
+ var opponents=el("opponentList");opponents.innerHTML="";
+ ids(currentRoom).forEach(function(id){
+  var p=currentRoom.players[id]||{},row=document.createElement("div");
+  row.className="player";
+  var name=document.createElement("span");
+  name.textContent=(p.name||"Player")+(id===uid?" (You)":"");
+  var count=g.hands&&g.hands[id]?g.hands[id].length:0;
+  var tag=document.createElement("small");
+  tag.textContent=(g.turnUid===id&&!g.finished?"Their turn • ":"")+count+" cards";
+  row.appendChild(name);row.appendChild(tag);opponents.appendChild(row);
+ });
+
+ var handNode=el("hand");handNode.innerHTML="";
+ displayedHand(hand).forEach(function(item){
+  var c=item.card,b=document.createElement("button");
+  b.className="card"+(c.red?" red":"")+(isWild(c,g.wildRank)?" joker":"")+(selectedIndex===item.index?" selected":"");
+  b.innerHTML=c.printedJoker?"★<span class='suit'>JOKER</span>":safe(c.rank)+"<span class='suit'>"+safe(c.symbol)+"</span>";
+  b.disabled=!canDiscard;
+  b.onclick=function(){selectCard(item.index)};
+  handNode.appendChild(b);
+ });
+
+ if(!canDiscard)msg("handMessage","Your hand: "+hand.length+" cards.");
+ else msg("handMessage",selectedIndex>=0?"Card selected. Press Discard.":"Select a card to discard.");
+
+ var resultBox=el("resultBox");resultBox.innerHTML="";
+ if(g.finished){
+  var result=document.createElement("div");result.className="panel";
+  result.innerHTML="<h3>Game Result</h3><p>"+safe(g.resultText)+"</p><h3>Scores</h3>";
+  ids(currentRoom).forEach(function(id){
+   var p=currentRoom.players[id]||{};
+   var line=document.createElement("p");
+   line.textContent=(p.name||"Player")+": "+((g.scores&&g.scores[id])||0)+" points";
+   result.appendChild(line);
+  });
+  resultBox.appendChild(result);
+ }
+ maybeAutoTest();
+}
+
+function maybeAutoTest(){
+ if(botBusy||!currentRoom||!currentCode)return;
+ var g=gameData();
+ if(!g||!g.started||g.finished||g.phase!=="draw")return;
+ var bot=g.turnUid;
+ if(!bot||bot.indexOf("test_")!==0)return;
+ botBusy=true;
+ var code=currentCode;
+
+ setTimeout(function(){
+  db.ref("rooms/"+code).transaction(function(r){
+   if(!r||!r.game||r.game.finished)return;
+   var game=r.game;
+   if(game.turnUid!==bot||game.phase!=="draw")return;
+   if(!game.hands)game.hands={};
+   if(!game.hands[bot])game.hands[bot]=[];
+   if(!game.deck)game.deck=[];
+   if(!game.discard)game.discard=[];
+
+   if(game.deck.length===0&&game.discard.length>1){
+    var top=game.discard.pop();game.deck=shuffled(game.discard);game.discard=[top];
+   }
+   if(game.deck.length)game.hands[bot].push(game.deck.pop());
+   else if(game.discard.length)game.hands[bot].push(game.discard.pop());
+   else return;
+
+   var h=game.hands[bot];
+   if(h.length>0){
+    var idx=Math.floor(Math.random()*h.length);
+    game.discard.push(h.splice(idx,1)[0]);
+   }
+
+   if(validateHand(h,game.wildRank).valid){
+    game.finished=true;game.winnerUid=bot;
+    game.resultText=(r.players[bot]&&r.players[bot].name||"Test Player")+" wins with a valid hand!";
+    game.scores={};
+    Object.keys(game.hands).forEach(function(id){game.scores[id]=0});
+    return r;
+   }
+
+   var order=game.turnOrder||[],pos=order.indexOf(bot);
+   if(pos<0||!order.length)return;
+   game.turnUid=order[(pos+1)%order.length];
+   game.phase="draw";
+   return r;
+  }).catch(function(e){error("Test Player error: "+e.message)})
+  .finally(function(){botBusy=false});
+ },1000);
+}
+
+initializeFirebase();
+</script>
+</body>
+</html>
